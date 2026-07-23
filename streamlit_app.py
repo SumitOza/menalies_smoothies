@@ -1,47 +1,64 @@
-# Import python packages
-import streamlit as st
-from snowflake.snowpark.functions import col, when_matched
-import requests  
-import pandas as pd
+CREATE or replace() DATABASE SMOOTHIES;
 
-name_on_smoothie = st.text_input('Name on Smoothie:')
+create or replace table smoothies.public.orders (
+       order_uid integer default smoothies.public.order_seq.nextval,
+       order_filled boolean default false,
+       name_on_order varchar(100),
+       ingredients varchar(200),
+       constraint order_uid unique (order_uid),
+       order_ts timestamp_ltz default current_timestamp()
+);
 
-cnx = st.connection("snowflake")
-session = cnx.session()
+create or replace file format smoothies.public.two_headerrow_pct_delim
+  type = CSV,
+  skip_header = 2,
+  field_delimiter = '%',
+  trim_space = TRUE
+;
 
-my_dataframe = session.table("smoothies.public.fruit_options").select(col('FRUIT_NAME'), col('SEARCH_ON'))
-pd_df = my_dataframe.to_pandas()
-#st.dataframe(pd_df)
-ingredients_list = st.multiselect(
-    'Choose up to 5 ingredients:',
-    pd_df['FRUIT_NAME'],
-    max_selections=5
-)
 
-# Write directly to the app
-st.title(f"Customize Your Smoothie! :cup_with_straw:")
-st.write(
-  """Choose the fruits you want in your custom smoothie!
-  """
-)
-if ingredients_list:
-    ingredients_string = ' '
-    
-    for fruit_choosen in ingredients_list:
-        ingredients_string += ' '+fruit_choosen+' '
-        search_on=pd_df.loc[pd_df['FRUIT_NAME'] == fruit_choosen, 'SEARCH_ON'].iloc[0]
-        st.write('The search value for ', fruit_choosen,' is ', search_on, '.')
-        st.subheader(fruit_choosen + ' Nutrition Information')
-        smoothiefroot_response = requests.get(f"https://my.smoothiefroot.com/api/fruit/{search_on}")
-        sf_df = st.dataframe(data=smoothiefroot_response.json(),use_container_width=True)
-        
-    
-    my_insert_stmt = """ insert into smoothies.public.orders(INGREDIENTS, NAME_ON_ORDER)
-                values ('""" + ingredients_string + """','"""+name_on_smoothie+"""')"""
-    
-    time_to_insert = st.button("Place Order")
-    
-    if time_to_insert:
-        st.write('Name on the Cup will be :', name_on_smoothie)
-        session.sql(my_insert_stmt).collect()
-        st.success('Your Smoothie is ordered!', icon="✅")
+SELECT $1, $2, $3, $4, $5
+FROM @SMOOTHIES.PUBLIC.MY_UPLOAD_FILES/fruits_available_for_smoothies.txt
+(FILE_FORMAT => smoothies.public.two_headerrow_pct_delim);
+
+
+COPY INTO smoothies.public.fruit_options (FRUIT_ID, FRUIT_NAME)
+FROM (SELECT $2, $1 FROM @SMOOTHIES.PUBLIC.MY_UPLOAD_FILES/fruits_available_for_smoothies.txt)
+FILE_FORMAT = (FORMAT_NAME = smoothies.public.two_headerrow_pct_delim)
+ON_ERROR = ABORT_STATEMENT;
+
+
+ALTER TABLE SMOOTHIES.PUBLIC.ORDERS
+ADD ORDER_FILLED boolean default FALSE;
+
+update smoothies.public.orders
+set order_filled = true
+where name_on_order is null;
+
+
+
+alter table SMOOTHIES.PUBLIaC.ORDERS 
+modify column order_uid 
+default smoothies.public.order_seq.nextval;
+
+
+CREATE FUNCTION util_db.public.SUM_MYSTERY_BAG_VAR(VAR1 NUMBER, VAR2 NUMBER, VAR3 NUMBER)
+    RETURNS NUMBER AS 'SELECT VAR1+VAR2+VAR3';
+
+SELECT util_db.public.SUM_MYSTERY_BAG_VAR(-10.5,2,1000);
+
+
+
+CREATE OR REPLACE FUNCTION UTIL_DB.PUBLIC.NEUTRALIZE_WHINING(VAR4 TEXT)
+    RETURNS TEXT AS 'SELECT INITCAP(VAR4)';
+
+
+UPDATE SMOOTHIES.PUBLIC.FRUIT_OPTIONS
+SET SEARCH_ON='Ugli Fruit (Jamaican Tangelo)' where FRUIT_NAME='Ugli Fruit';
+
+select fruit_name, search_on from fruit_options;
+
+
+
+select * from orders;
+truncate orders;
