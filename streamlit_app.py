@@ -24,9 +24,11 @@ st.write(
 )
 if ingredients_list:
     ingredients_string = ' '
-
+    
     for fruits_choosen in ingredients_list:
         ingredients_string += ' '+fruits_choosen+' '
+        smoothiefroot_response = requests.get("https://my.smoothiefroot.com/api/fruit/watermelon")
+        sf_df = st.dataframe(data=smoothiefroot_response.json(),use_container_width=True)
     
     my_insert_stmt = """ insert into smoothies.public.orders(INGREDIENTS, NAME_ON_ORDER)
                 values ('""" + ingredients_string + """','"""+name_on_smoothie+"""')"""
